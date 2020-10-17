@@ -1,0 +1,8 @@
+
+mssql :
+    databaseType    : "mssql"
+    server          : "52.91.134.162"
+    port            : 1433
+    user            : "sa"
+    password        : "Gti8552b"
+    database        : "MVC"
