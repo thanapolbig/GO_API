@@ -1,53 +1,64 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-
-	mssql "golang-101/database/mssql"
-	"golang-101/handler"
-
-	log "github.com/sirupsen/logrus"
+	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
+	"github.com/spf13/viper"
 )
+var DB *gorm.DB
+type DEPARTMENT struct {
+	DEPT_ID   int    `gorm:"column:DEPT_ID;"`
+	DEPT_NAME string `gorm:"column:DEPT_NAME;"`
+	HEAD_ID   int    `gorm:"column:HEAD_ID;"`
+	DEPT_HEAD string `gorm:"column:DEPT_HEAD;"`
+} //Department
 
 func main() {
+	r := gin.Default()
+	r.POST("/insert", insert)
 
-	port := flag.String("port", "8080", "port number")
-	configPath := flag.String("config", "configure", "set configs path, default as: 'configure'")
-
-	flag.Parse()
-	log.Infof("port : %+v", *port)
-	log.Infof("configPath directory : %+v", *configPath)
-
-	//connect database
-	InitConnectionDatabase(*configPath)
-
-	// start http server
-	r := handler.Routes{}
-	handleRoute := r.InitTransactionRoute()
-	srv := &http.Server{
-		Addr:    fmt.Sprint(":", *port),
-		Handler: handleRoute,
+	server, port, user, password, database := connectdb()
+	connectionString := fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d;database=%s",
+		server, user, password, port, database)
+	DB, err := gorm.Open("mssql", connectionString)
+	if err != nil {
+		panic("failed to connect database")
 	}
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Panicf("transaction listen: %s\n", err)
-		} else if err != nil {
-			log.Panicf("transaction listen error: %s\n", err)
-		}
-		log.Infof("transaction listen at: %s", *port)
-	}()
+	defer DB.Close()
 
-	//create channel wait signals
-	//จับสัญญาณ ctr+C
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
-	<-signals // wait for SIGINT
+
 }
 
-func InitConnectionDatabase(configPath string) {
-	mssql.InitDB(configPath)
-}
+func connectdb() (string, int, string, string, string) {
+	viper.SetConfigFile("config.yaml")
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("fetal error config file: %s", err))
+	}
+
+	server1 := viper.GetString("mssql.server")
+	port1 := viper.GetInt("mssql.port")
+	user1 := viper.GetString("mssql.user")
+	password1 := viper.GetString("mssql.password")
+	database1 := viper.GetString("mssql.database")
+
+	return server1, port1, user1, password1, database1
+} //connectdatabase
+
+
+func insert(c *gin.Context) {
+	var deptInfo []DEPARTMENT
+	c.BindJSON(&deptInfo)
+	fmt.Printf("deptInfo = %+v", deptInfo)
+	err := DB.Select("DEPT_ID,DEPT_NAME,HEAD_ID,DEPT_HEAD").Table("DEPARTMENT").Create(&deptInfo).Error
+	if err != nil {
+		fmt.Print(err)
+		panic("failed to insert database")
+	}
+	c.JSON(200, gin.H{
+		"Status": deptInfo,
+	})
+} //databa
+
